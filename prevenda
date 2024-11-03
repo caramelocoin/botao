@@ -1,0 +1,524 @@
+<div class="presale-container">
+    <div class="connect-buttons">
+        <button id="connect-metamask" class="btn">Conectar MetaMask</button>
+        <button id="connect-walletconnect" class="btn">Conectar WalletConnect</button>
+    </div>
+
+    <div id="wallet-info" class="hidden">
+        <p><strong>Saldo em BNB:</strong> <span id="bnb-balance">0</span></p>
+        <p><strong>Tokens Comprados:</strong> <span id="token-balance">0</span></p>
+    </div>
+
+    <div id="purchase-section" class="hidden">
+        <input type="number" id="bnb-amount" placeholder="Digite a quantidade de BNB" step="0.01" min="0" />
+        <button id="buy-ttokens" class="btn">Comprar Tokens</button>
+        <button id="claim-tokens" class="btn">Claim Tokens</button>
+    </div>
+
+    <div id="update-logout-buttons" class="hidden">
+        <button id="update-info" class="btn">Atualizar</button>
+        <button id="logout" class="btn">Sair</button>
+    </div>
+
+    <p id="status-message"></p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/web3/1.6.0/web3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.7.8/dist/umd/index.min.js"></script>
+<script src="https://unpkg.com/web3modal@1.9.8/dist/index.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+    let web3Modal;
+    let provider;
+    let web3;
+    let userAddress;
+
+    const BSC_CHAIN_ID = '0x38'; // Binance Smart Chain Mainnet
+    const contractAddress = "0x892992d13956A6c35dDF403acd947fa08594463e";
+    const contractABI = [
+	                            {
+		                            "inputs": [
+			                            {
+				                        "internalType": "address",
+				                        "name": "_presaleWallet",
+				                        "type": "address"
+			                        }
+		                        ],
+		                        "stateMutability": "nonpayable",
+		                        "type": "constructor"
+	                        },
+	                            {
+		                        "anonymous": false,
+		                        "inputs": [
+			                            {
+				                            "indexed": true,
+				                        "internalType": "address",
+				                        "name": "previousOwner",
+				                        "type": "address"
+			                            },
+			                            {
+				                            "indexed": true,
+				                            "internalType": "address",
+				                            "name": "newOwner",
+				                            "type": "address"
+			                            }
+		                            ],
+		                            "name": "OwnershipTransferred",
+		                        "type": "event"
+	                        },
+	                        {
+		                        "anonymous": false,
+		                        "inputs": [],
+                            		"name": "PresaleEnded",
+                            		"type": "event"
+                            	},
+                            	{
+                            		"anonymous": false,
+                            		"inputs": [
+                            			{
+                            				"indexed": true,
+                            				"internalType": "address",
+                            				"name": "buyer",
+                            				"type": "address"
+                            			},
+                            			{
+                            				"indexed": false,
+                            				"internalType": "uint256",
+                            				"name": "amount",
+                            				"type": "uint256"
+                            			},
+                            			{
+                            				"indexed": false,
+                            				"internalType": "uint256",
+                            				"name": "phase",
+                            				"type": "uint256"
+                            			}
+                            		],
+                            		"name": "TokensPurchased",
+                            		"type": "event"
+                            	},
+                            	{
+                            		"inputs": [
+                            			{
+                            				"internalType": "address",
+                            				"name": "",
+                            				"type": "address"
+                            			}
+                            		],
+                            		"name": "bnbContributed",
+                            		"outputs": [
+                            			{
+                            				"internalType": "uint256",
+                            				"name": "",
+                            				"type": "uint256"
+                            			}
+                            		],
+                            		"stateMutability": "view",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "buyTokens",
+                            		"outputs": [],
+                            		"stateMutability": "payable",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "claimTokens",
+                            		"outputs": [],
+                            		"stateMutability": "nonpayable",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "currentPhase",
+                            		"outputs": [
+                            			{
+                            				"internalType": "uint256",
+                            				"name": "",
+                            				"type": "uint256"
+                            			}
+                            		],
+                            		"stateMutability": "view",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [
+                            			{
+                            				"internalType": "uint256",
+                            				"name": "",
+                            				"type": "uint256"
+                            			}
+                            		],
+                            		"name": "durations",
+                            		"outputs": [
+                            			{
+                            				"internalType": "uint256",
+                            				"name": "",
+                            				"type": "uint256"
+                            			}
+                            		],
+                            		"stateMutability": "view",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "endPresale",
+                            		"outputs": [],
+                            		"stateMutability": "nonpayable",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "getCurrentPhase",
+                            		"outputs": [
+                            			{
+                            				"components": [
+                            					{
+                            						"internalType": "uint256",
+                            						"name": "rate",
+                            						"type": "uint256"
+                            					},
+                            					{
+                            						"internalType": "uint256",
+                            						"name": "endTime",
+                            						"type": "uint256"
+                            					}
+                            				],
+                            				"internalType": "struct CarameloPresale.Phase",
+                            				"name": "",
+                            				"type": "tuple"
+                            			}
+                            		],
+                            		"stateMutability": "view",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "owner",
+                            		"outputs": [
+                            			{
+                            				"internalType": "address",
+                            				"name": "",
+                            				"type": "address"
+                            			}
+                            		],
+                            		"stateMutability": "view",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [
+                            			{
+                            				"internalType": "uint256",
+                            				"name": "",
+                            				"type": "uint256"
+                            			}
+                            		],
+                            		"name": "phases",
+                            		"outputs": [
+                            			{
+                            				"internalType": "uint256",
+                            				"name": "rate",
+                            				"type": "uint256"
+                            			},
+                            			{
+                            				"internalType": "uint256",
+                            				"name": "endTime",
+                            				"type": "uint256"
+                            			}
+                            		],
+                            		"stateMutability": "view",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "presaleEnded",
+                            		"outputs": [
+                            			{
+                            				"internalType": "bool",
+                            				"name": "",
+                            				"type": "bool"
+                            			}
+                            		],
+                            		"stateMutability": "view",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "presaleWallet",
+                            		"outputs": [
+                            			{
+                            				"internalType": "address",
+                            				"name": "",
+                            				"type": "address"
+                            			}
+                            		],
+                            		"stateMutability": "view",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [
+                            			{
+                            				"internalType": "address",
+                            				"name": "",
+                            				"type": "address"
+                            			}
+                            		],
+                            		"name": "purchasedTokens",
+                            		"outputs": [
+                            			{
+                            				"internalType": "uint256",
+                            				"name": "",
+                            				"type": "uint256"
+                            			}
+                            		],
+                            		"stateMutability": "view",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [
+                            			{
+                            				"internalType": "uint256",
+                            				"name": "",
+                            				"type": "uint256"
+                            			}
+                            		],
+                            		"name": "rates",
+                            		"outputs": [
+                            			{
+                            				"internalType": "uint256",
+                            				"name": "",
+                            				"type": "uint256"
+                            			}
+                            		],
+                            		"stateMutability": "view",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "renounceOwnership",
+                            		"outputs": [],
+                            		"stateMutability": "nonpayable",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "token",
+                            		"outputs": [
+                            			{
+                            				"internalType": "contract IERC20",
+                            				"name": "",
+                            				"type": "address"
+                            			}
+                            		],
+                            		"stateMutability": "view",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "totalTokensAvailable",
+                            		"outputs": [
+                            			{
+                            				"internalType": "uint256",
+                            				"name": "",
+                            				"type": "uint256"
+                            			}
+                            		],
+                            		"stateMutability": "view",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "totalTokensSold",
+                            		"outputs": [
+                            			{
+                            				"internalType": "uint256",
+                            				"name": "",
+                            				"type": "uint256"
+                            			}
+                            		],
+                            		"stateMutability": "view",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [
+                            			{
+                            				"internalType": "address",
+                            				"name": "newOwner",
+                            				"type": "address"
+                            			}
+                            		],
+                            		"name": "transferOwnership",
+                            		"outputs": [],
+                            		"stateMutability": "nonpayable",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [
+                            			{
+                            				"internalType": "address",
+                            				"name": "newPresaleWallet",
+                            				"type": "address"
+                            			}
+                            		],
+                            		"name": "updatePresaleWallet",
+                            		"outputs": [],
+                            		"stateMutability": "nonpayable",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "withdrawFunds",
+                            		"outputs": [],
+                            		"stateMutability": "nonpayable",
+                            		"type": "function"
+                            	},
+                            	{
+                            		"inputs": [],
+                            		"name": "withdrawUnsoldTokens",
+                            		"outputs": [],
+                            		"stateMutability": "nonpayable",
+                            		"type": "function"
+                            	}
+                            ];
+
+    const providerOptions = {
+        walletconnect: {
+            package: WalletConnectProvider.default,
+            options: {
+                rpc: {
+                    56: "https://bsc-dataseed.binance.org/"
+                }
+            }
+        }
+    };
+
+    web3Modal = new Web3Modal.default({
+        cacheProvider: false,
+        providerOptions,
+    });
+
+    async function connectWallet() {
+        try {
+            provider = await web3Modal.connect();
+            web3 = new Web3(provider);
+            const accounts = await web3.eth.getAccounts();
+            userAddress = accounts[0];
+            console.log('Conectado:', userAddress);
+
+            await checkNetwork();
+            updateUI();
+            getBalances();
+        } catch (error) {
+            console.error('Erro ao conectar carteira:', error);
+        }
+    }
+
+    async function checkNetwork() {
+        const chainId = await web3.eth.getChainId();
+        if (chainId !== parseInt(BSC_CHAIN_ID, 16)) {
+            try {
+                await provider.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: BSC_CHAIN_ID }],
+                });
+                alert('Rede alterada para Binance Smart Chain.');
+            } catch (error) {
+                alert('Erro ao mudar para BSC: ' + error.message);
+            }
+        }
+    }
+
+    async function getBalances() {
+        const bnbBalance = await web3.eth.getBalance(userAddress);
+        document.getElementById('bnb-balance').innerText = web3.utils.fromWei(bnbBalance, 'ether');
+
+        const contract = new web3.eth.Contract(contractABI, contractAddress);
+        const tokensPurchased = await contract.methods.purchasedTokens(userAddress).call();
+        document.getElementById('token-balance').innerText = web3.utils.fromWei(tokensPurchased, 'ether');
+    }
+
+    // Função para Comprar Tokens
+    document.getElementById('buy-ttokens').addEventListener('click', async () => {
+        try {
+            const bnbAmount = document.getElementById('bnb-amount').value;
+            if (!bnbAmount || bnbAmount <= 0) {
+                alert('Por favor, insira uma quantidade válida de BNB.');
+                return;
+            }
+
+            const weiAmount = web3.utils.toWei(bnbAmount, 'ether');
+            const contract = new web3.eth.Contract(contractABI, contractAddress);
+
+            const tx = await contract.methods.buyTokens().send({
+                from: userAddress,
+                value: weiAmount,
+                gas: 300000, // Limite de gas
+            });
+
+            console.log('Transação realizada:', tx);
+            document.getElementById('status-message').innerText =
+                `Tokens comprados com sucesso! Hash: ${tx.transactionHash}`;
+            getBalances();
+        } catch (error) {
+            console.error('Erro ao comprar tokens:', error);
+
+            // Mostra uma mensagem genérica ao usuário, sem detalhes do erro
+            document.getElementById('status-message').innerText =
+                'Ocorreu um erro ao processar sua solicitação. Tente novamente mais tarde.';
+        }
+    });
+
+    // Função para Reivindicar Tokens
+    document.getElementById('claim-tokens').addEventListener('click', async () => {
+        try {
+            const contract = new web3.eth.Contract(contractABI, contractAddress);
+            const amount = await contract.methods.purchasedTokens(userAddress).call();
+
+            if (amount <= 0) {
+                alert('Você não tem tokens para reivindicar.');
+                return;
+            }
+
+            const tx = await contract.methods.claimTokens().send({
+                from: userAddress,
+                gas: 200000, // Limite de gas
+            });
+
+            console.log('Tokens reivindicados:', tx);
+            document.getElementById('status-message').innerText =
+                `Tokens reivindicados com sucesso! Hash: ${tx.transactionHash}`;
+            getBalances();
+        } catch (error) {
+            console.error('Erro ao reivindicar tokens:', error);
+            document.getElementById('status-message').innerText =
+                `Erro ao reivindicar tokens: ${error.message}`;
+        }
+    });
+
+    function updateUI() {
+        document.querySelector('.connect-buttons').classList.add('hidden');
+        document.getElementById('update-logout-buttons').classList.remove('hidden');
+        document.getElementById('wallet-info').classList.remove('hidden');
+        document.getElementById('purchase-section').classList.remove('hidden');
+    }
+
+    function resetUI() {
+        web3Modal.clearCachedProvider();
+        document.querySelector('.connect-buttons').classList.remove('hidden');
+        document.getElementById('update-logout-buttons').classList.add('hidden');
+        document.getElementById('wallet-info').classList.add('hidden');
+        document.getElementById('purchase-section').classList.add('hidden');
+        document.getElementById('status-message').innerText = '';
+    }
+
+    document.getElementById('connect-metamask').addEventListener('click', connectWallet);
+    document.getElementById('connect-walletconnect').addEventListener('click', connectWallet);
+    document.getElementById('update-info').addEventListener('click', getBalances);
+    document.getElementById('logout').addEventListener('click', resetUI);
+});
+</script>
